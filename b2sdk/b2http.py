@@ -15,9 +15,12 @@ import logging
 import json
 import socket
 
+import pycurl
 import requests
 import six
 import time
+
+from io import BytesIO
 
 from .exception import (
     B2Error, BadDateFormat, BrokenPipe, B2ConnectionError, B2RequestTimeout, ClockSkew,
@@ -249,6 +252,7 @@ class B2Http(object):
         """
         requests_to_use = requests_module or requests
         self.session = requests_to_use.Session()
+        self.curl = pycurl.Curl()
         self.callbacks = []
         if install_clock_skew_hook:
             self.add_callback(ClockSkewHook())
@@ -363,6 +367,26 @@ class B2Http(object):
             return response
 
         response = _translate_and_retry(do_get, try_count, None)
+        return ResponseContextManager(response)
+
+    def get_content_pycurl(self, url, headers):
+        header_list_for_curl = [key + ':' + value for key, value in headers.items()]
+
+        # Do the HTTP GET.
+        def do_get():
+            self._run_pre_request_hooks('GET', url, headers)
+
+            response = BytesIO()
+            self.curl.setopt(pycurl.HTTPHEADER, header_list_for_curl)
+            self.curl.setopt(pycurl.USERAGENT, USER_AGENT)
+            self.curl.setopt(self.curl.URL, url)
+            self.curl.setopt(self.curl.WRITEDATA, response)
+            self.curl.perform()
+
+            self._run_post_request_hooks('GET', url, headers, response)
+            return response
+
+        response = do_get()
         return ResponseContextManager(response)
 
     def _run_pre_request_hooks(self, method, url, headers):
