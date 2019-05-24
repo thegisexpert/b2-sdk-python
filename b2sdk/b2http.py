@@ -252,10 +252,9 @@ class B2Http(object):
         """
         requests_to_use = requests_module or requests
         self.session = requests_to_use.Session()
-        self.curl = pycurl.Curl()
         self.callbacks = []
-        if install_clock_skew_hook:
-            self.add_callback(ClockSkewHook())
+        #if install_clock_skew_hook:
+        #    self.add_callback(ClockSkewHook())
 
     def add_callback(self, callback):
         """
@@ -330,7 +329,7 @@ class B2Http(object):
         data = six.BytesIO(six.b(json.dumps(params)))
         return self.post_content_return_json(url, headers, data, try_count, params)
 
-    def get_content(self, url, headers, try_count=5):
+    def get_content_old(self, url, headers, try_count=5):
         """
         Fetches content from a URL.
 
@@ -369,25 +368,57 @@ class B2Http(object):
         response = _translate_and_retry(do_get, try_count, None)
         return ResponseContextManager(response)
 
-    def get_content_pycurl(self, url, headers):
+    def get_content(self, url, headers):
         header_list_for_curl = [key + ':' + value for key, value in headers.items()]
 
-        # Do the HTTP GET.
-        def do_get():
-            self._run_pre_request_hooks('GET', url, headers)
+        class Dummy(object):
+            pass
 
-            response = BytesIO()
-            self.curl.setopt(pycurl.HTTPHEADER, header_list_for_curl)
-            self.curl.setopt(pycurl.USERAGENT, USER_AGENT)
-            self.curl.setopt(self.curl.URL, url)
-            self.curl.setopt(self.curl.WRITEDATA, response)
-            self.curl.perform()
+        class MyResponse(object):
+            def __init__(self, url, headers):
+                dummy_request = Dummy()
+                dummy_request.url = url
+                dummy_request.headers = {}  # transferrer is looking for Range here...
 
-            self._run_post_request_hooks('GET', url, headers, response)
-            return response
+                self.request = dummy_request
+                self.headers = {
+                    'x-bz-file-id': '4_ze41a3a297896f57d567f0010_f114b87e222e79938_d20161028_m135943_c001_v0001031_t0030',
+                    'x-bz-file-name': '1234',
+                    'content-type': 'a/b',
+                    'content-type': 'a/b',
+                    #'content-length': '25165824',
+                    'content-length': '3000000000',
+                    'x-bz-content-sha1': 'none',  # TODO
+                    'x-bz-upload-timestamp': 1540754527000,
+                }
 
-        response = do_get()
-        return ResponseContextManager(response)
+            def iter_content(self, chunk_size):
+                #self._run_pre_request_hooks('GET', url, headers)
+
+                bytesio = BytesIO()
+
+                curl = pycurl.Curl()
+                curl.setopt(pycurl.HTTPHEADER, header_list_for_curl)
+                curl.setopt(pycurl.USERAGENT, USER_AGENT)
+                #curl.setopt(pycurl.BUFFERSIZE, 512*1024)
+                curl.setopt(pycurl.BUFFERSIZE, 10*1024*1024)
+                curl.setopt(pycurl.NOSIGNAL, 1)
+                curl.setopt(pycurl.URL, url)
+                curl.setopt(pycurl.WRITEDATA, bytesio)
+                curl.perform()
+                bytesio.seek(0)
+
+                #self._run_post_request_hooks('GET', url, headers, response)
+
+                data = six.b('42')
+                while data:
+                    data = bytesio.read(chunk_size)
+                    yield data
+
+            def close(self):
+                pass
+
+        return ResponseContextManager(MyResponse(url, headers))
 
     def _run_pre_request_hooks(self, method, url, headers):
         for callback in self.callbacks:
