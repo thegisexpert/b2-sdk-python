@@ -18,15 +18,9 @@ from .cache import AuthInfoCache, DummyCache
 from .transferer import Transferer
 from .exception import NonExistentBucket, RestrictedBucket
 from .file_version import FileVersionInfoFactory, FileIdAndName
-from .part import PartFactory
 from .raw_api import API_VERSION, B2RawApi
 from .session import B2Session
 from .utils import B2TraceMeta, b2_url_encode, limit_trace_arguments
-
-try:
-    import concurrent.futures as futures
-except ImportError:
-    import futures
 
 
 def url_for_api(info, api_name):
@@ -120,17 +114,9 @@ class B2Api(object):
 
         :param int max_workers: maximum allowed number of workers in a pool
         """
-        if self.upload_executor is not None:
+        if self.transferer.upload_executor is not None:
             raise Exception('thread pool already created')
         self.max_workers = max_workers
-
-    def get_thread_pool(self):
-        """
-        Return the thread pool executor to use for uploads and downloads.
-        """
-        if self.upload_executor is None:
-            self.upload_executor = futures.ThreadPoolExecutor(max_workers=self.max_workers)
-        return self.upload_executor
 
     def authorize_automatically(self):
         """
@@ -340,14 +326,7 @@ class B2Api(object):
         :param int batch_size: the number of parts to fetch at a time from the server
         :rtype: generator
         """
-        batch_size = batch_size or 100
-        while True:
-            response = self.session.list_parts(file_id, start_part_number, batch_size)
-            for part_dict in response['parts']:
-                yield PartFactory.from_list_parts_dict(part_dict)
-            start_part_number = response.get('nextPartNumber')
-            if start_part_number is None:
-                break
+        return self.transferer.list_parts(file_id, start_part_number=start_part_number, batch_size=batch_size)
 
     # delete/cancel
     def cancel_large_file(self, file_id):
