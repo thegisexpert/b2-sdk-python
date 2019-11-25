@@ -14,7 +14,6 @@ import six
 from .exception import UnrecognizedBucketType
 from .file_version import FileVersionInfoFactory
 from .progress import DoNothingProgressListener
-from .unfinished_large_file import UnfinishedLargeFile
 from .upload_source import UploadSourceBytes, UploadSourceLocalFile
 from .utils import b2_url_encode, validate_b2_file_name
 from .utils import B2TraceMeta, disable_trace, limit_trace_arguments
@@ -276,25 +275,22 @@ class Bucket(object):
                     prefix + current_dir[:-1] + '0',
                 )
 
-    def list_unfinished_large_files(self, start_file_id=None, batch_size=None):
+    def list_unfinished_large_files(self, start_file_id=None, batch_size=None, prefix=None):
         """
         A generator that yields an :py:class:`b2sdk.v1.UnfinishedLargeFile` for each
         unfinished large file in the bucket, starting at the given file.
 
         :param str,None start_file_id: a file ID to start from or None to start from the beginning
         :param int,None batch_size: max file count
+        :param str,None prefix: file name prefix filter
         :rtype: generator[b2sdk.v1.UnfinishedLargeFile]
         """
-        batch_size = batch_size or 100
-        while True:
-            batch = self.api.session.list_unfinished_large_files(
-                self.id_, start_file_id, batch_size
-            )
-            for file_dict in batch['files']:
-                yield UnfinishedLargeFile(file_dict)
-            start_file_id = batch.get('nextFileId')
-            if start_file_id is None:
-                break
+        return self.api.transferer.list_unfinished_large_files(
+            self.id_,
+            start_file_id=start_file_id,
+            batch_size=batch_size,
+            prefix=prefix,
+        )
 
     def start_large_file(self, file_name, content_type=None, file_info=None):
         """
@@ -304,8 +300,8 @@ class Bucket(object):
         :param str,None content_type: the MIME type, or ``None`` to accept the default based on file extension of the B2 file name
         :param dict,None file_infos: a file info to store with the file or ``None`` to not store anything
         """
-        return UnfinishedLargeFile(
-            self.api.session.start_large_file(self.id_, file_name, content_type, file_info)
+        return self.api.transferer.start_large_file(
+            self.id_, file_name, content_type=content_type, file_info=file_info
         )
 
     @limit_trace_arguments(skip=('data_bytes',))
@@ -403,15 +399,10 @@ class Bucket(object):
         content_type = content_type or self.DEFAULT_CONTENT_TYPE
         progress_listener = progress_listener or DoNothingProgressListener()
 
-        # We don't upload any large files unless all of the parts can be at least
-        # the minimum part size.
-        min_part_size = max(min_part_size or 0, self.api.account_info.get_minimum_part_size())
-        min_large_file_size = min_part_size * 2
-
         return self.api.transferer.upload(
             self.id_,
             upload_source,
-            min_large_file_size,
+            min_part_size,
             file_name,
             content_type,
             file_info,

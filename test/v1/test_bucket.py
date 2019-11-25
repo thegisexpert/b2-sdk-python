@@ -156,14 +156,17 @@ class TestListParts(TestCaseWithBucket):
         content_sha1 = hex_sha1_of_bytes(content)
         large_file_upload_state = mock.MagicMock()
         large_file_upload_state.has_error.return_value = False
-        self.bucket._upload_part(
-            file1.file_id, 1, (0, 11), UploadSourceBytes(content), large_file_upload_state
+        self.api.transferer._upload_part(
+            self.bucket_id, file1.file_id, 1, (0, 11), UploadSourceBytes(content),
+            large_file_upload_state
         )
-        self.bucket._upload_part(
-            file1.file_id, 2, (0, 11), UploadSourceBytes(content), large_file_upload_state
+        self.api.transferer._upload_part(
+            self.bucket_id, file1.file_id, 2, (0, 11), UploadSourceBytes(content),
+            large_file_upload_state
         )
-        self.bucket._upload_part(
-            file1.file_id, 3, (0, 11), UploadSourceBytes(content), large_file_upload_state
+        self.api.transferer._upload_part(
+            self.bucket_id, file1.file_id, 3, (0, 11), UploadSourceBytes(content),
+            large_file_upload_state
         )
         expected_parts = [
             Part('9999', 1, 11, content_sha1),
@@ -181,8 +184,9 @@ class TestUploadPart(TestCaseWithBucket):
         large_file_upload_state = LargeFileUploadState(file_progress_listener)
         large_file_upload_state.set_error('test error')
         try:
-            self.bucket._upload_part(
-                file1.file_id, 1, (0, 11), UploadSourceBytes(content), large_file_upload_state
+            self.api.transferer._upload_part(
+                self.bucket_id, file1.file_id, 1, (0, 11), UploadSourceBytes(content),
+                large_file_upload_state
             )
             self.fail('should have thrown')
         except AlreadyFailed:

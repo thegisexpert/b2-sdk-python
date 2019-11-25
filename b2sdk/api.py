@@ -94,29 +94,14 @@ class B2Api(object):
             if cache is None:
                 cache = AuthInfoCache(account_info)
         self.session = B2Session(self, self.raw_api)
-        self.transferer = Transferer(self.session, account_info)
+        self.transferer = Transferer(
+            self.session, account_info, max_upload_workers=max_upload_workers
+        )
         self.account_info = account_info
         if cache is None:
             cache = DummyCache()
         self.cache = cache
         self.upload_executor = None
-        self.max_workers = max_upload_workers
-
-    def set_thread_pool_size(self, max_workers):
-        """
-        Set the size of the thread pool to use for uploads and downloads.
-
-        Must be called before any work starts, or the thread pool will get
-        the default size of 1.
-
-        .. todo::
-            move set_thread_pool_size and get_thread_pool to transferer
-
-        :param int max_workers: maximum allowed number of workers in a pool
-        """
-        if self.transferer.upload_executor is not None:
-            raise Exception('thread pool already created')
-        self.max_workers = max_workers
 
     def authorize_automatically(self):
         """
@@ -326,7 +311,9 @@ class B2Api(object):
         :param int batch_size: the number of parts to fetch at a time from the server
         :rtype: generator
         """
-        return self.transferer.list_parts(file_id, start_part_number=start_part_number, batch_size=batch_size)
+        return self.transferer.list_parts(
+            file_id, start_part_number=start_part_number, batch_size=batch_size
+        )
 
     # delete/cancel
     def cancel_large_file(self, file_id):

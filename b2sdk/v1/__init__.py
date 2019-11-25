@@ -16,8 +16,6 @@
 from b2sdk.api import B2Api
 from b2sdk.bucket import Bucket
 from b2sdk.bucket import BucketFactory
-from b2sdk.bucket import LargeFileUploadState
-from b2sdk.bucket import PartProgressReporter
 from b2sdk.raw_api import ALL_CAPABILITIES
 
 # account info
@@ -94,12 +92,14 @@ from b2sdk.upload_source import UploadSourceLocalFile
 
 from b2sdk.transferer.abstract import AbstractDownloader
 from b2sdk.transferer.file_metadata import FileMetadata
+from b2sdk.transferer.large_file_upload_state import LargeFileUploadState
 from b2sdk.transferer.parallel import AbstractDownloaderThread
 from b2sdk.transferer.parallel import FirstPartDownloaderThread
 from b2sdk.transferer.parallel import NonHashingDownloaderThread
 from b2sdk.transferer.parallel import ParallelDownloader
 from b2sdk.transferer.parallel import PartToDownload
 from b2sdk.transferer.parallel import WriterThread
+from b2sdk.transferer.progress_reporter import PartProgressReporter
 from b2sdk.transferer.range import Range
 from b2sdk.transferer.simple import SimpleDownloader
 from b2sdk.transferer.transferer import Transferer
