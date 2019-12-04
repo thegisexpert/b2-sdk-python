@@ -152,12 +152,8 @@ class Bucket(object):
         :param b2sdk.v1.AbstractProgressListener, None progress_listener: a progress listener object to use, or ``None`` to not track progress
         :param tuple[int, int] range_: two integer values, start and end offsets
         """
-        url = self.api.session.get_download_url_by_name(
-            self.name,
-            file_name,
-            url_factory=self.api.account_info.get_download_url,
-        )
-        return self.api.transferer.download_file_from_url(
+        url = self.api.session.get_download_url_by_name(self.name, file_name)
+        return self.api.download_manager.download_file_from_url(
             url, download_dest, progress_listener, range_
         )
 
@@ -285,7 +281,7 @@ class Bucket(object):
         :param str,None prefix: file name prefix filter
         :rtype: generator[b2sdk.v1.UnfinishedLargeFile]
         """
-        return self.api.transferer.list_unfinished_large_files(
+        return self.api.services.large_file.list_unfinished_large_files(
             self.id_,
             start_file_id=start_file_id,
             batch_size=batch_size,
@@ -300,7 +296,7 @@ class Bucket(object):
         :param str,None content_type: the MIME type, or ``None`` to accept the default based on file extension of the B2 file name
         :param dict,None file_infos: a file info to store with the file or ``None`` to not store anything
         """
-        return self.api.transferer.start_large_file(
+        return self.api.services.large_file.start_large_file(
             self.id_, file_name, content_type=content_type, file_info=file_info
         )
 
@@ -399,14 +395,15 @@ class Bucket(object):
         content_type = content_type or self.DEFAULT_CONTENT_TYPE
         progress_listener = progress_listener or DoNothingProgressListener()
 
-        return self.api.transferer.upload(
+        return self.api.upload_manager.upload(
             self.id_,
             upload_source,
-            min_part_size,
             file_name,
             content_type,
             file_info,
             progress_listener,
+            # FIXME: Bucket.upload documents wrong logic
+            min_large_file_size=min_part_size * 2 if min_part_size is not None else None
         )
 
     def get_download_url(self, filename):
@@ -432,6 +429,7 @@ class Bucket(object):
         response = self.api.session.hide_file(self.id_, file_name)
         return FileVersionInfoFactory.from_api_response(response)
 
+    # FIXME: this would be replaced by `copy(...)` which would use `self.api.upload_manager.copy`
     def copy_file(
         self,
         file_id,

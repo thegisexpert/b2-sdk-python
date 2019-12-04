@@ -41,8 +41,8 @@ from b2sdk.utils import trace_call
 
 from b2sdk.file_version import FileIdAndName
 from b2sdk.file_version import FileVersionInfo
-from b2sdk.part import Part
-from b2sdk.unfinished_large_file import UnfinishedLargeFile
+from b2sdk.large_file.part import Part
+from b2sdk.large_file.unfinished_large_file import UnfinishedLargeFile
 
 # progress reporting
 
@@ -66,7 +66,6 @@ from b2sdk.raw_simulator import RawSimulator
 from b2sdk.raw_api import AbstractRawApi
 from b2sdk.raw_api import B2RawApi
 from b2sdk.raw_api import MetadataDirectiveMode
-from b2sdk.raw_api import TokenType
 
 # progress
 
@@ -88,21 +87,21 @@ from b2sdk.upload_source import AbstractUploadSource
 from b2sdk.upload_source import UploadSourceBytes
 from b2sdk.upload_source import UploadSourceLocalFile
 
-# trasferer
+# trasfer
 
-from b2sdk.transferer.abstract import AbstractDownloader
-from b2sdk.transferer.file_metadata import FileMetadata
-from b2sdk.transferer.large_file_upload_state import LargeFileUploadState
-from b2sdk.transferer.parallel import AbstractDownloaderThread
-from b2sdk.transferer.parallel import FirstPartDownloaderThread
-from b2sdk.transferer.parallel import NonHashingDownloaderThread
-from b2sdk.transferer.parallel import ParallelDownloader
-from b2sdk.transferer.parallel import PartToDownload
-from b2sdk.transferer.parallel import WriterThread
-from b2sdk.transferer.progress_reporter import PartProgressReporter
-from b2sdk.transferer.range import Range
-from b2sdk.transferer.simple import SimpleDownloader
-from b2sdk.transferer.transferer import Transferer
+from b2sdk.transfer.inbound.downloader.abstract import AbstractDownloader
+from b2sdk.transfer.inbound.file_metadata import FileMetadata
+from b2sdk.transfer.outbound.large_file_upload_state import LargeFileUploadState
+from b2sdk.transfer.inbound.downloader.parallel import AbstractDownloaderThread
+from b2sdk.transfer.inbound.downloader.parallel import FirstPartDownloaderThread
+from b2sdk.transfer.inbound.downloader.parallel import NonHashingDownloaderThread
+from b2sdk.transfer.inbound.downloader.parallel import ParallelDownloader
+from b2sdk.transfer.inbound.downloader.parallel import PartToDownload
+from b2sdk.transfer.inbound.downloader.parallel import WriterThread
+from b2sdk.transfer.outbound.progress_reporter import PartProgressReporter
+from b2sdk.transfer.inbound.downloader.range import Range
+from b2sdk.transfer.inbound.downloader.simple import SimpleDownloader
+from b2sdk.transfer.outbound.upload_source_part import UploadSourcePart
 
 # sync
 

@@ -1,4 +1,4 @@
-from ..progress import AbstractProgressListener
+from b2sdk.progress import AbstractProgressListener
 
 
 class PartProgressReporter(AbstractProgressListener):
