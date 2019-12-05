@@ -40,7 +40,7 @@ def url_for_api(info, api_name):
     return '%s/b2api/%s/%s' % (base, API_VERSION, api_name)
 
 
-class Services:
+class Services(object):
     def __init__(self, session):
         self.large_file = LargeFileServices(session)
 

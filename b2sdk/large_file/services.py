@@ -3,7 +3,7 @@ from b2sdk.large_file.part import PartFactory
 from b2sdk.large_file.unfinished_large_file import UnfinishedLargeFile
 
 
-class LargeFileServices:
+class LargeFileServices(object):
     def __init__(self, session):
         self.session = session
 
