@@ -25,11 +25,24 @@ logger = logging.getLogger(__name__)
 
 
 @six.add_metaclass(B2TraceMetaAbstract)
-class UploadManager:
+class UploadManager(object):
+    """
+    Handle complex actions around uploads to free raw_api from that responsibility.
+    """
+
     MAX_UPLOAD_ATTEMPTS = 5
     MAX_LARGE_FILE_SIZE = 10 * 1000 * 1000 * 1000 * 1000  # 10 TB
 
     def __init__(self, session, services, max_upload_workers=10):
+        """
+        Initialize the CopyManager using the given session.
+
+        :param session: an instance of :class:`~b2sdk.v1.B2Session`,
+                      or any custom class derived from
+                      :class:`~b2sdk.v1.B2Session`
+        :param services: an instace of :class:`~b2sdk.v1.Services`
+        :param int max_upload_workers: a number of upload threads, default is 10
+        """
         self.session = session
         self.services = services
 
@@ -71,6 +84,26 @@ class UploadManager:
         progress_listener,
         min_large_file_size=None
     ):
+        """
+        Upload a file to B2, retrying as needed.
+
+        The source of the upload is an UploadSource object that can be used to
+        open (and re-open) the file.  The result of opening should be a binary
+        file whose read() method returns bytes.
+
+        :param :param str bucket_id: a bucket ID
+        :param b2sdk.v1.UploadSource upload_source: an object that opens the source of the upload
+        :param str file_name: the file name of the new B2 file
+        :param str,None content_type: the MIME type, or ``None`` to accept the default based on file extension of the B2 file name
+        :param dict,None file_info: a file info to store with the file or ``None`` to not store anything
+        :param b2sdk.v1.AbstractProgressListener progress_listener: a progress listener object to use
+        :param int,None min_large_file_size: the smallest size that would upload large file or ``None`` to determine automatically
+
+        The function `opener` should return a file-like object, and it
+        must be possible to call it more than once in case the upload
+        is retried.
+        """
+
         # We don't upload any large files unless all of the parts can be at least
         # the minimum part size.
         if min_large_file_size is None:
@@ -100,6 +133,11 @@ class UploadManager:
             )
 
     def split_upload_source(self, upload_source):
+        """
+        Split upload source to upload source part for large file upload
+
+        :param b2sdk.v1.UploadSource upload_source: an object that opens the source of the upload
+        """
         minimum_part_size = self.account_info.get_minimum_part_size()
         part_ranges = choose_part_ranges(upload_source.get_content_length(), minimum_part_size)
         for (part_number, (source_offset, part_length)) in enumerate(part_ranges, 1):
@@ -108,6 +146,17 @@ class UploadManager:
     def upload_part(
         self, bucket_id, file_id, upload_source_part, large_file_upload_state, finished_parts=None
     ):
+        """
+        Upload a file part to started large file.
+
+        :param :param str bucket_id: a bucket ID
+        :param file_id: a large file ID
+        :param b2sdk.v1.UploadSourcePart upload_source_part: wrapper for upload source that reads only required range
+        :param b2sdk.v1.LargeFileUploadState large_file_upload_state: state object for progress reporting
+                                                                      on large file upload
+        :param dict,None finished_parts: dictionary of known finished parts, keys are part numbers,
+                                         values are instances of :class:`~b2sdk.v1.Part`
+        """
         # Check if this part was uploaded before
         if finished_parts is not None and upload_source_part.part_number in finished_parts:
             # Report this part finished

@@ -1,4 +1,4 @@
-class CopySource:
+class CopySource(object):
     def __init__(
         self, file_id, content_length=None, file_info=None, offset=0, small_file_promise=False
     ):
@@ -22,7 +22,7 @@ class CopySource:
         return (self.offset, self.offset + self.content_length - 1)
 
 
-class CopySourcePart:
+class CopySourcePart(object):
     def __init__(self, copy_source, part_number, source_offset=0, part_length=None):
         self.copy_source = copy_source
         if source_offset > 0 and part_length is None:

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from b2sdk.progress import RangeOfInputStream
 
 
-class UploadSourcePart:
+class UploadSourcePart(object):
     def __init__(self, upload_source, source_offset, part_length, part_number):
         self.upload_source = upload_source
         self.source_offset = source_offset

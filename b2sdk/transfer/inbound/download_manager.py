@@ -21,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 @six.add_metaclass(B2TraceMetaAbstract)
-class DownloadManager:
+class DownloadManager(object):
+    """
+    Handle complex actions around downloads to free raw_api from that responsibility.
+    """
+
     # how many chunks to break a downloaded file into
     DEFAULT_MAX_STREAMS = 8
 
@@ -33,6 +37,14 @@ class DownloadManager:
     MAX_CHUNK_SIZE = 1024**2
 
     def __init__(self, session):
+        """
+        Initialize the DownloadManager using the given session.
+
+        :param session: an instance of :class:`~b2sdk.v1.B2Session`,
+                      or any custom class derived from
+                      :class:`~b2sdk.v1.B2Session`
+        """
+
         self.session = session
         self.strategies = [
             ParallelDownloader(
