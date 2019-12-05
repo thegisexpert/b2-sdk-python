@@ -185,8 +185,8 @@ class TestUploadPart(TestCaseWithBucket):
         large_file_upload_state.set_error('test error')
         try:
             self.api.upload_manager.upload_part(
-                self.bucket_id, file1.file_id, UploadSourcePart(UploadSourceBytes(content), 0, 11, 1),
-                large_file_upload_state
+                self.bucket_id, file1.file_id,
+                UploadSourcePart(UploadSourceBytes(content), 0, 11, 1), large_file_upload_state
             )
             self.fail('should have thrown')
         except AlreadyFailed:

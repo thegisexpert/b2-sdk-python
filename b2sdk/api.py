@@ -69,7 +69,14 @@ class B2Api(object):
     BUCKET_FACTORY_CLASS = staticmethod(BucketFactory)
     BUCKET_CLASS = staticmethod(Bucket)
 
-    def __init__(self, account_info=None, cache=None, raw_api=None, max_upload_workers=10, max_copy_workers=10):
+    def __init__(
+        self,
+        account_info=None,
+        cache=None,
+        raw_api=None,
+        max_upload_workers=10,
+        max_copy_workers=10
+    ):
         """
         Initialize the API using the given session.
 
@@ -83,10 +90,16 @@ class B2Api(object):
         self.session = B2Session(account_info=account_info, cache=cache, raw_api=raw_api)
         self.services = Services(self.session)
         self.download_manager = DownloadManager(self.session)
-        self.upload_manager = UploadManager(self.session, self.services, max_upload_workers=max_upload_workers)
-        self.copy_manager = CopyManager(self.session, self.services, max_copy_workers=max_copy_workers)
-        self.emerger = Emerger(self.session, self.services, self.download_manager,
-                               self.upload_manager, self.copy_manager)
+        self.upload_manager = UploadManager(
+            self.session, self.services, max_upload_workers=max_upload_workers
+        )
+        self.copy_manager = CopyManager(
+            self.session, self.services, max_copy_workers=max_copy_workers
+        )
+        self.emerger = Emerger(
+            self.session, self.services, self.download_manager, self.upload_manager,
+            self.copy_manager
+        )
 
     @property
     def account_info(self):
@@ -181,7 +194,9 @@ class B2Api(object):
         :return: context manager that returns an object that supports iter_content()
         """
         url = self.session.get_download_url_by_id(file_id)
-        return self.download_manager.download_file_from_url(url, download_dest, progress_listener, range_)
+        return self.download_manager.download_file_from_url(
+            url, download_dest, progress_listener, range_
+        )
 
     def get_bucket_by_id(self, bucket_id):
         """

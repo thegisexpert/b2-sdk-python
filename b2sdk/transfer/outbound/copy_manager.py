@@ -58,8 +58,16 @@ class CopyManager:
             self.copy_executor = futures.ThreadPoolExecutor(max_workers=self.max_workers)
         return self.copy_executor
 
-    def copy(self, copy_source, file_name, content_type=None, file_info=None,
-             progress_listener=None, destination_bucket_id=None, min_large_file_size=None):
+    def copy(
+        self,
+        copy_source,
+        file_name,
+        content_type=None,
+        file_info=None,
+        progress_listener=None,
+        destination_bucket_id=None,
+        min_large_file_size=None
+    ):
         # We don't upload any large files unless all of the parts can be at least
         # the minimum part size.
         if min_large_file_size is None:
@@ -111,11 +119,7 @@ class CopyManager:
             yield CopySourcePart(copy_source, source_offset + part_offset, part_length, part_number)
 
     def copy_part(
-        self,
-        large_file_id,
-        copy_source_part,
-        large_file_upload_state,
-        finished_parts=None
+        self, large_file_id, copy_source_part, large_file_upload_state, finished_parts=None
     ):
         # Check if this part was uploaded before
         if finished_parts is not None and copy_source_part.part_number in finished_parts:
@@ -140,8 +144,9 @@ class CopyManager:
         # TODO: large_file_upload_state.update_part_bytes
         return response
 
-    def _copy_small_file(self, copy_source, file_name, content_type=None, file_info=None,
-                         destination_bucket_id=None):
+    def _copy_small_file(
+        self, copy_source, file_name, content_type=None, file_info=None, destination_bucket_id=None
+    ):
         # no progress report - because there is nothing to report
         if copy_source.content_length is None and copy_source.offset is not None:
             raise NotImplementedError('copy offset of unknown length is not supported yet')
@@ -166,11 +171,20 @@ class CopyManager:
         )
         return FileVersionInfoFactory.from_api_response(response)
 
-    def _copy_large_file(self, copy_source, file_name, progress_listener,
-                         content_type=None, file_info=None, destination_bucket_id=None):
+    def _copy_large_file(
+        self,
+        copy_source,
+        file_name,
+        progress_listener,
+        content_type=None,
+        file_info=None,
+        destination_bucket_id=None
+    ):
         if destination_bucket_id is None:
             # TODO: should be supported
-            raise NotImplementedError('checking for bucket_id of copy source file_id is not supported')
+            raise NotImplementedError(
+                'checking for bucket_id of copy source file_id is not supported'
+            )
 
         if content_type is None:
             # TODO: should be supported

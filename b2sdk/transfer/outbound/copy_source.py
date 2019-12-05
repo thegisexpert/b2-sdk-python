@@ -1,5 +1,7 @@
 class CopySource:
-    def __init__(self, file_id, content_length=None, file_info=None, offset=0, small_file_promise=False):
+    def __init__(
+        self, file_id, content_length=None, file_info=None, offset=0, small_file_promise=False
+    ):
         self.file_id = file_id
         if self.content_length is not None and small_file_promise:
             raise ValueError('Cannot promise small file of known content length')

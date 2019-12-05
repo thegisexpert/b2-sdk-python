@@ -141,8 +141,7 @@ class B2Session(object):
         )
 
     def create_key(
-        self, account_id, capabilities, key_name,
-        valid_duration_seconds, bucket_id, name_prefix
+        self, account_id, capabilities, key_name, valid_duration_seconds, bucket_id, name_prefix
     ):
         return self._wrap_default_token(
             'create_key',
@@ -164,17 +163,16 @@ class B2Session(object):
         return self._wrap_default_token('delete_file_version', file_id, file_name)
 
     def download_file_from_url(self, url, range_=None):
-        return self._wrap_token('download_file_from_url', TokenType.API_TOKEN_ONLY, url, range_=range_)
+        return self._wrap_token(
+            'download_file_from_url', TokenType.API_TOKEN_ONLY, url, range_=range_
+        )
 
     def finish_large_file(self, file_id, part_sha1_array):
         return self._wrap_default_token('finish_large_file', file_id, part_sha1_array)
 
     def get_download_authorization(self, bucket_id, file_name_prefix, valid_duration_in_seconds):
         return self._wrap_default_token(
-            'get_download_authorization',
-            bucket_id,
-            file_name_prefix,
-            valid_duration_in_seconds
+            'get_download_authorization', bucket_id, file_name_prefix, valid_duration_in_seconds
         )
 
     def get_file_info(self, file_id):
@@ -229,12 +227,7 @@ class B2Session(object):
             prefix=prefix,
         )
 
-    def list_keys(
-        self,
-        account_id,
-        max_key_count=None,
-        start_application_key_id=None
-    ):
+    def list_keys(self, account_id, max_key_count=None, start_application_key_id=None):
         return self._wrap_default_token(
             'list_keys',
             account_id,
@@ -261,7 +254,9 @@ class B2Session(object):
         )
 
     def start_large_file(self, bucket_id, file_name, content_type, file_info):
-        return self._wrap_default_token('start_large_file', bucket_id, file_name, content_type, file_info)
+        return self._wrap_default_token(
+            'start_large_file', bucket_id, file_name, content_type, file_info
+        )
 
     def update_bucket(
         self,
@@ -285,8 +280,8 @@ class B2Session(object):
         )
 
     def upload_file(
-        self, bucket_id, file_name, content_length, content_type, content_sha1,
-        file_infos, data_stream
+        self, bucket_id, file_name, content_length, content_type, content_sha1, file_infos,
+        data_stream
     ):
         return self._wrap_token(
             'upload_file',
@@ -315,7 +310,9 @@ class B2Session(object):
         return self.raw_api.get_download_url_by_id(self.account_info.get_download_url(), file_id)
 
     def get_download_url_by_name(self, bucket_name, file_name):
-        return self.raw_api.get_download_url_by_name(self.account_info.get_download_url(), bucket_name, file_name)
+        return self.raw_api.get_download_url_by_name(
+            self.account_info.get_download_url(), bucket_name, file_name
+        )
 
     def copy_file(
         self,

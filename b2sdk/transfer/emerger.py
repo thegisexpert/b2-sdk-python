@@ -19,12 +19,16 @@ class Emerger:
         self.upload_manager = upload_manager
         self.copy_manager = copy_manager
 
-    def emerge(self, bucket_id, emerge_ranges_iterator, file_name, content_type, file_info,
-               progress_listener):
+    def emerge(
+        self, bucket_id, emerge_ranges_iterator, file_name, content_type, file_info,
+        progress_listener
+    ):
         # TODO: this is only a draft implementation that support concat interface only for files > 5mb
 
         # TODO: we assume that there is more than one emerge range on iterator
-        unfinished_file = self.services.large_file.start_large_file(bucket_id, file_name, content_type, file_info)
+        unfinished_file = self.services.large_file.start_large_file(
+            bucket_id, file_name, content_type, file_info
+        )
         file_id = unfinished_file.file_id
 
         total_bytes = 0
@@ -75,7 +79,9 @@ class Emerger:
                         ) for copy_source_part in copy_source_parts
                     )
                 else:
-                    raise NotImplementedError('not implemented emerge source: {0}'.format(emerge_source_type))
+                    raise NotImplementedError(
+                        'not implemented emerge source: {0}'.format(emerge_source_type)
+                    )
 
             part_sha1_array = [interruptible_get_result(f)['contentSha1'] for f in part_futures]
 
@@ -83,15 +89,21 @@ class Emerger:
         response = self.session.finish_large_file(file_id, part_sha1_array)
         return FileVersionInfoFactory.from_api_response(response)
 
-    def concat(self, bucket_id, emrege_sources_iterator, file_name, content_type, file_info,
-               progress_listener):
+    def concat(
+        self, bucket_id, emrege_sources_iterator, file_name, content_type, file_info,
+        progress_listener
+    ):
         def emerge_ranges_generator():
             current_position = 0
             for emerge_source in emrege_sources_iterator:
-                current_position, upload_range = self._wrap_emerge_range(current_position, emerge_source)
+                current_position, upload_range = self._wrap_emerge_range(
+                    current_position, emerge_source
+                )
                 yield upload_range
-        return self.emerge(emerge_ranges_generator, file_name, content_type, file_info,
-                           progress_listener)
+
+        return self.emerge(
+            emerge_ranges_generator, file_name, content_type, file_info, progress_listener
+        )
 
     def _wrap_emerge_range(self, current_position, emerge_source):
         pass

@@ -1,7 +1,6 @@
 import logging
 import six
 
-
 from b2sdk.exception import (
     AlreadyFailed,
     B2Error,
@@ -9,10 +8,7 @@ from b2sdk.exception import (
     MaxRetriesExceeded,
 )
 from b2sdk.file_version import FileVersionInfoFactory
-from b2sdk.progress import (
-    ReadingStreamWithProgress,
-    StreamWithHash
-)
+from b2sdk.progress import (ReadingStreamWithProgress, StreamWithHash)
 from b2sdk.raw_api import HEX_DIGITS_AT_END
 from b2sdk.utils import B2TraceMetaAbstract, choose_part_ranges, hex_sha1_of_stream, interruptible_get_result
 
@@ -66,8 +62,14 @@ class UploadManager:
         return self.upload_executor
 
     def upload(
-        self, bucket_id, upload_source, file_name, content_type, file_info,
-        progress_listener, min_large_file_size=None
+        self,
+        bucket_id,
+        upload_source,
+        file_name,
+        content_type,
+        file_info,
+        progress_listener,
+        min_large_file_size=None
     ):
         # We don't upload any large files unless all of the parts can be at least
         # the minimum part size.
@@ -104,12 +106,7 @@ class UploadManager:
             yield UploadSourcePart(upload_source, source_offset, part_length, part_number)
 
     def upload_part(
-        self,
-        bucket_id,
-        file_id,
-        upload_source_part,
-        large_file_upload_state,
-        finished_parts=None
+        self, bucket_id, file_id, upload_source_part, large_file_upload_state, finished_parts=None
     ):
         # Check if this part was uploaded before
         if finished_parts is not None and upload_source_part.part_number in finished_parts:
@@ -137,8 +134,8 @@ class UploadManager:
                     hashing_stream = StreamWithHash(input_stream)
                     length_with_hash = upload_source_part.part_length + hashing_stream.hash_size()
                     response = self.session.upload_part(
-                        file_id, upload_source_part.part_number, length_with_hash, HEX_DIGITS_AT_END,
-                        hashing_stream
+                        file_id, upload_source_part.part_number, length_with_hash,
+                        HEX_DIGITS_AT_END, hashing_stream
                     )
                     assert hashing_stream.hash == response['contentSha1']
                     return response
@@ -166,8 +163,8 @@ class UploadManager:
                         hashing_stream = StreamWithHash(input_stream)
                         length_with_hash = content_length + hashing_stream.hash_size()
                         response = self.session.upload_file(
-                            bucket_id, file_name, length_with_hash, content_type,
-                            HEX_DIGITS_AT_END, file_info, hashing_stream
+                            bucket_id, file_name, length_with_hash, content_type, HEX_DIGITS_AT_END,
+                            file_info, hashing_stream
                         )
                         assert hashing_stream.hash == response['contentSha1']
                         return FileVersionInfoFactory.from_api_response(response)
@@ -203,7 +200,9 @@ class UploadManager:
 
         # Tell B2 we're going to upload a file if necessary
         if unfinished_file is None:
-            unfinished_file = self.services.large_file.start_large_file(bucket_id, file_name, content_type, file_info)
+            unfinished_file = self.services.large_file.start_large_file(
+                bucket_id, file_name, content_type, file_info
+            )
         file_id = unfinished_file.file_id
 
         with progress_listener:
