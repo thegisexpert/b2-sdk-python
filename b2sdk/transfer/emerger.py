@@ -137,6 +137,7 @@ class Emerger(object):
 
         Thin wrapper around ``emerge`` function to show ``Emerger`` possible applications
         """
+
         def emerge_ranges_generator():
             current_position = 0
             for emerge_source in emrege_sources_iterator:
