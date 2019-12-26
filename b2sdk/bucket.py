@@ -530,15 +530,14 @@ class Bucket(object):
         with progress_listener:
             for _ in six.moves.xrange(self.MAX_UPLOAD_ATTEMPTS):
                 try:
+                    content_sha1 = upload_source.get_content_sha1()
                     with upload_source.open() as file:
                         input_stream = ReadingStreamWithProgress(file, progress_listener)
-                        hashing_stream = StreamWithHash(input_stream)
-                        length_with_hash = content_length + hashing_stream.hash_size()
                         response = self.api.session.upload_file(
-                            self.id_, None, file_name, length_with_hash, content_type,
-                            HEX_DIGITS_AT_END, file_info, hashing_stream
+                            self.id_, None, file_name, content_length, content_type, content_sha1,
+                            file_info, input_stream
                         )
-                        assert hashing_stream.hash == response['contentSha1']
+                        assert content_sha1 == response['contentSha1']
                         return FileVersionInfoFactory.from_api_response(response)
                 except B2Error as e:
                     if not e.should_retry_upload():
@@ -572,7 +571,9 @@ class Bucket(object):
 
         # Tell B2 we're going to upload a file if necessary
         if unfinished_file is None:
-            unfinished_file = self.start_large_file(file_name, content_type, file_info)
+            start_file_info = file_info.copy()
+            start_file_info['large_file_sha1'] = upload_source.get_content_sha1()
+            unfinished_file = self.start_large_file(file_name, content_type, start_file_info)
         file_id = unfinished_file.file_id
 
         with progress_listener:

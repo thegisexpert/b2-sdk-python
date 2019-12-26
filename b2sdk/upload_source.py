@@ -72,12 +72,12 @@ class UploadSourceLocalFile(AbstractUploadSource):
 
     def get_content_sha1(self):
         if self.content_sha1 is None:
-            self.content_sha1 = self._hex_sha1_of_file(self.local_path)
+            self.content_sha1 = self._hex_sha1_of_file()
         return self.content_sha1
 
     def open(self):
         return open(self.local_path, 'rb')
 
-    def _hex_sha1_of_file(self, local_path):
-        with open(local_path, 'rb') as f:
+    def _hex_sha1_of_file(self):
+        with self.open() as f:
             return hex_sha1_of_stream(f, self.content_length)
