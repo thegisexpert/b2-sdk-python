@@ -452,11 +452,12 @@ def interpret_b2_error(status, code, message, response_headers, post_params=None
         return MissingPart(post_params.get('fileId'))
     elif status == 400 and code == "part_sha1_mismatch":
         return PartSha1Mismatch(post_params.get('fileId'))
-    elif status == 400 and code == "bad_request":
+    elif status == 400 and code == "bad_request" and UPLOAD_TOKEN_USED_CONCURRENTLY_ERROR_MESSAGE_RE.match(message) is not None:
+        # in python 3.8+ we could use the walrus operator, but here we sacrifice CPU for an
+        # extra re.match in a corner case to keep UnknownError initialization in one place
         matcher = UPLOAD_TOKEN_USED_CONCURRENTLY_ERROR_MESSAGE_RE.match(message)
-        if matcher is not None:
-            token = matcher.group('token')
-            return UploadTokenUsedConcurrently(token)
+        token = matcher.group('token')
+        return UploadTokenUsedConcurrently(token)
     elif status == 401 and code in ("bad_auth_token", "expired_auth_token"):
         return InvalidAuthToken(message, code)
     elif status == 401:
