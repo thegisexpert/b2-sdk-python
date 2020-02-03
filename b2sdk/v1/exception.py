@@ -59,6 +59,7 @@ from b2sdk.exception import UnknownHost
 from b2sdk.exception import UnrecognizedBucketType
 from b2sdk.exception import UnsatisfiableRange
 from b2sdk.exception import UnusableFileName
+from b2sdk.exception import UploadTokenUsedConcurrently
 from b2sdk.exception import interpret_b2_error
 from b2sdk.sync.exception import EnvironmentEncodingError
 from b2sdk.sync.exception import IncompleteSync
@@ -119,5 +120,6 @@ __all__ = (
     'UnrecognizedBucketType',
     'UnsatisfiableRange',
     'UnusableFileName',
+    'UploadTokenUsedConcurrently',
     'interpret_b2_error',
 )

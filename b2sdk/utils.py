@@ -9,12 +9,15 @@
 ######################################################################
 
 from __future__ import division, print_function
+import functools
 import hashlib
 import os
 import platform
+import random
 import re
 import shutil
 import tempfile
+import time
 
 from logfury.v0_1 import DefaultTraceAbstractMeta, DefaultTraceMeta, limit_trace_arguments, disable_trace, trace_call
 
@@ -382,7 +385,7 @@ class ConcurrentUsedAuthTokenGuard(object):
 
     def __enter__(self):
         if not self.lock.acquire(False):
-            from b2sdk.exception import UploadTokenUsedConcurrently
+            from .exception import UploadTokenUsedConcurrently  # avoid import loop
             raise UploadTokenUsedConcurrently(self.token)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -393,6 +396,18 @@ class ConcurrentUsedAuthTokenGuard(object):
             pass
 
 
+def sometimes_sleepy(function):
+    """ decorator used to induce variable concurrency in multithreaded code """
+
+    @functools.wraps(function)
+    def _inner(*args, **kwargs):
+        time.sleep(random.randint(0, 1) / 1000.0)
+        return function(*args, **kwargs)
+
+    return _inner
+
+
 assert disable_trace
 assert limit_trace_arguments
 assert trace_call
+assert sometimes_sleepy

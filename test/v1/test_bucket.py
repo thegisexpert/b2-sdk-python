@@ -10,10 +10,11 @@
 
 from __future__ import absolute_import, division
 
-from nose import SkipTest
+from concurrent.futures import ThreadPoolExecutor
 import os
 import platform
 
+from nose import SkipTest
 import six
 
 from .test_base import TestBase
@@ -27,6 +28,7 @@ from .deps_exception import (
     InvalidUploadSource,
     MaxRetriesExceeded,
     UnsatisfiableRange,
+    UploadTokenUsedConcurrently,
 )
 from .deps import B2Api
 from .deps import LargeFileUploadState
@@ -561,13 +563,23 @@ class TestUpload(TestCaseWithBucket):
         return large_file_info['fileId']
 
     def _upload_part(self, large_file_id, part_number, part_data):
-        part_stream = six.BytesIO(part_data)
-        upload_info = self.simulator.get_upload_part_url(
+        upload_info = self._get_upload_info(large_file_id)
+        return self._upload_part_using_info(large_file_id, part_number, part_data, upload_info)
+
+    def _get_upload_info(self, large_file_id):
+        return self.simulator.get_upload_part_url(
             self.api_url, self.account_auth_token, large_file_id
         )
-        self.simulator.upload_part(
-            upload_info['uploadUrl'], upload_info['authorizationToken'], part_number,
-            len(part_data), hex_sha1_of_bytes(part_data), part_stream
+
+    def _upload_part_using_info(self, large_file_id, part_number, part_data, upload_info):
+        part_stream = six.BytesIO(part_data)
+        return self.simulator.upload_part(
+            upload_info['uploadUrl'],
+            upload_info['authorizationToken'],
+            part_number,
+            len(part_data),
+            hex_sha1_of_bytes(part_data),
+            part_stream,
         )
 
     def _check_file_contents(self, file_name, expected_contents):
@@ -591,6 +603,89 @@ class TestUpload(TestCaseWithBucket):
             fragments.append(fragment)
         return six.b('').join(fragments)
 
+    def test_unique_upload_url_works_in_one_thread(self):
+        # this one really tests the simulator, but it is impractical to make that test live elsewhere
+        part_size = self.simulator.MIN_PART_SIZE
+        data = self._make_data(part_size * 3)
+        large_file_id = self._start_large_file('file1')
+
+        upload_info = self._get_upload_info(large_file_id)
+        part_datas = [
+            self._upload_part_using_info(large_file_id, 1, data[:part_size], upload_info),
+            self._upload_part_using_info(large_file_id, 2, data[part_size:2 * part_size], upload_info),
+            self._upload_part_using_info(large_file_id, 3, data[2 * part_size:], upload_info),
+        ]  # yapf: disable
+        part_sha1_array = [data['contentSha1'] for data in part_datas]
+        file_id = self.api.session.finish_large_file(large_file_id, part_sha1_array)['fileId']
+        self.assertEqual(large_file_id, file_id)
+        self._check_file_contents('file1', data)
+
+    def test_unique_upload_url_works_in_one_thread_until_failure(self):
+        # this one really tests the simulator, but it is impractical to make that test live elsewhere
+        part_size = self.simulator.MIN_PART_SIZE
+        data = self._make_data(part_size * 2)
+        large_file_id = self._start_large_file('file1')
+
+        upload_info = self._get_upload_info(large_file_id)
+
+        part_datas = []
+        part_data = self._upload_part_using_info(large_file_id, 1, data[:part_size], upload_info)
+        part_datas = [part_data]
+
+        #induce failure
+        self.simulator.set_upload_errors([CanRetry(True)])
+        with self.assertRaises(CanRetry):
+            self._upload_part_using_info(large_file_id, 2, data[part_size:], upload_info)
+
+        # and now the old upload_info should no longer work when we retry
+        with self.assertRaises(InvalidAuthToken):  # TODO this is probably not the correct exception for this?
+            self._upload_part_using_info(large_file_id, 2, data[part_size:], upload_info)
+
+        # get new upload info and finish the job
+        upload_info = self._get_upload_info(large_file_id)
+        part_data = self._upload_part_using_info(large_file_id, 2, data[part_size:], upload_info)
+
+        part_datas.append(part_data)
+        part_sha1_array = [data['contentSha1'] for data in part_datas]
+        file_id = self.api.session.finish_large_file(large_file_id, part_sha1_array)['fileId']
+        self.assertEqual(large_file_id, file_id)
+        self._check_file_contents('file1', data)
+
+    def test_unique_upload_url_does_not_work_in_many_threads(self):
+        # this one really tests the simulator, but it is impractical to make that test live elsewhere
+        THREAD_COUNT = 500
+        part_size = self.simulator.MIN_PART_SIZE
+        data = self._make_data(part_size * THREAD_COUNT)
+        large_file_id = self._start_large_file('file1')
+
+        upload_info = self._get_upload_info(large_file_id)
+        with ThreadPoolExecutor(max_workers=THREAD_COUNT) as executor:
+            futures = [
+                executor.submit(
+                    self._upload_part_using_info,
+                    large_file_id,
+                    part_id + 1,
+                    data[part_id * part_size:(part_id + 1) * part_size],
+                    upload_info,
+                ) for part_id in range(THREAD_COUNT)
+            ]
+        with self.assertRaises(UploadTokenUsedConcurrently):
+            [future.result()['contentSha1'] for future in futures]
+
+    def test_bucket_properly_cleans_auth_pool(self):
+        part_size = self.simulator.MIN_PART_SIZE
+        data = self._make_data(part_size * 3)
+        large_file_id = self._start_large_file('file1')
+
+        self.simulator.set_upload_errors([CanRetry(True)])
+        file_info = self.bucket.upload_bytes(data, 'file1')
+
+        print(self.simulator.token_blacklist)
+        print(self.account_info._large_file_uploads)
+
+        self._check_file_contents('file1', data)
+        file_info = self.bucket.upload_bytes(data, 'file2')
+        assert False
 
 # Downloads
 

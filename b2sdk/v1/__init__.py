@@ -46,6 +46,7 @@ from b2sdk.utils import (
     format_and_scale_number,
     hex_sha1_of_stream,
     hex_sha1_of_bytes,
+    sometimes_sleepy,
     TempDir,
 )
 

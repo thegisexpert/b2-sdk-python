@@ -9,7 +9,7 @@
 ######################################################################
 
 import collections
-import random
+import logging
 import re
 import time
 import threading
@@ -33,7 +33,7 @@ from .exception import (
     UnsatisfiableRange,
 )
 from .raw_api import AbstractRawApi, HEX_DIGITS_AT_END, MetadataDirectiveMode, set_token_type, TokenType
-from .utils import b2_url_decode, b2_url_encode, ConcurrentUsedAuthTokenGuard
+from .utils import b2_url_decode, b2_url_encode, ConcurrentUsedAuthTokenGuard, sometimes_sleepy
 
 ALL_CAPABILITES = [
     'listKeys',
@@ -48,6 +48,8 @@ ALL_CAPABILITES = [
     'writeFiles',
     'deleteFiles',
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class KeySimulator(object):
@@ -339,6 +341,8 @@ class BucketSimulator(object):
         self.file_id_to_file = dict()
         # It would be nice to use an OrderedDict for this, but 2.6 doesn't have it.
         self.file_name_and_id_to_file = dict()
+        self._part_id_lock = threading.Lock()
+        self._last_part_id = 0
 
     def bucket_dict(self):
         return dict(
@@ -353,6 +357,7 @@ class BucketSimulator(object):
             revision=self.revision,
         )
 
+    @sometimes_sleepy
     def cancel_large_file(self, file_id):
         file_sim = self.file_id_to_file[file_id]
         key = (file_sim.name, file_id)
@@ -365,6 +370,7 @@ class BucketSimulator(object):
             fileName=file_sim.name
         )  # yapf: disable
 
+    @sometimes_sleepy
     def delete_file_version(self, file_id, file_name):
         key = (file_name, file_id)
         file_sim = self.file_name_and_id_to_file[key]
@@ -372,10 +378,12 @@ class BucketSimulator(object):
         del self.file_id_to_file[file_id]
         return dict(fileId=file_id, fileName=file_name, uploadTimestamp=file_sim.upload_timestamp)
 
+    @sometimes_sleepy
     def download_file_by_id(self, file_id, url, range_=None):
         file_sim = self.file_id_to_file[file_id]
         return self._download_file_sim(file_sim, url, range_=range_)
 
+    @sometimes_sleepy
     def download_file_by_name(self, file_name, url, range_=None):
         files = self.list_file_names(file_name, 1)['files']
         if len(files) == 0:
@@ -389,23 +397,33 @@ class BucketSimulator(object):
     def _download_file_sim(self, file_sim, url, range_=None):
         return ResponseContextManager(self.RESPONSE_CLASS(file_sim, url, range_))
 
+    @sometimes_sleepy
     def finish_large_file(self, file_id, part_sha1_array):
         file_sim = self.file_id_to_file[file_id]
         file_sim.finish(part_sha1_array)
         return file_sim.as_upload_result()
 
+    @sometimes_sleepy
     def get_file_info(self, file_id):
         return self.file_id_to_file[file_id].as_upload_result()
 
+    @sometimes_sleepy
     def get_upload_url(self):
         upload_id = six.next(self.upload_url_counter)
         upload_url = 'https://upload.example.com/%s/%s' % (self.bucket_id, upload_id)
         return dict(bucketId=self.bucket_id, uploadUrl=upload_url, authorizationToken=upload_url)
 
+    @sometimes_sleepy
     def get_upload_part_url(self, file_id):
-        upload_url = 'https://upload.example.com/part/%s/%d' % (file_id, random.randint(1, 10**9))
+        upload_url = 'https://upload.example.com/part/%s/%d' % (file_id, self._get_part_id())
         return dict(bucketId=self.bucket_id, uploadUrl=upload_url, authorizationToken=upload_url)
 
+    def _get_part_id(self):
+        with self._part_id_lock:
+            self._last_part_id += 1
+            return self._last_part_id
+
+    @sometimes_sleepy
     def hide_file(self, file_name):
         file_id = self._next_file_id()
         file_sim = self.FILE_SIMULATOR_CLASS(
@@ -416,6 +434,7 @@ class BucketSimulator(object):
         self.file_name_and_id_to_file[file_sim.sort_key()] = file_sim
         return file_sim.as_list_files_dict()
 
+    @sometimes_sleepy
     def copy_file(
         self,
         file_id,
@@ -464,6 +483,7 @@ class BucketSimulator(object):
 
         return copy_file_sim
 
+    @sometimes_sleepy
     def list_file_names(self, start_file_name=None, max_file_count=None, prefix=None):
         assert prefix is None or start_file_name is None or start_file_name.startswith(prefix
                                                                                       ), locals()
@@ -486,6 +506,7 @@ class BucketSimulator(object):
                         break
         return dict(files=result_files, nextFileName=next_file_name)
 
+    @sometimes_sleepy
     def list_file_versions(
         self,
         start_file_name=None,
@@ -515,10 +536,12 @@ class BucketSimulator(object):
                     break
         return dict(files=result_files, nextFileName=next_file_name, nextFileId=next_file_id)
 
+    @sometimes_sleepy
     def list_parts(self, file_id, start_part_number, max_part_count):
         file_sim = self.file_id_to_file[file_id]
         return file_sim.list_parts(start_part_number, max_part_count)
 
+    @sometimes_sleepy
     def list_unfinished_large_files(self, start_file_id=None, max_file_count=None, prefix=None):
         start_file_id = start_file_id or self.FIRST_FILE_ID
         max_file_count = max_file_count or 100
@@ -546,6 +569,7 @@ class BucketSimulator(object):
             next_file_id = str(int(file_dict_list[-1]['fileId']) - 1)
         return dict(files=file_dict_list, nextFileId=next_file_id)
 
+    @sometimes_sleepy
     def start_large_file(self, file_name, content_type, file_info):
         file_id = self._next_file_id()
         file_sim = self.FILE_SIMULATOR_CLASS(
@@ -556,6 +580,7 @@ class BucketSimulator(object):
         self.file_name_and_id_to_file[file_sim.sort_key()] = file_sim
         return file_sim.as_start_large_file_result()
 
+    @sometimes_sleepy
     def update_bucket(
         self,
         bucket_type=None,
@@ -578,6 +603,7 @@ class BucketSimulator(object):
         self.revision += 1
         return self.bucket_dict()
 
+    @sometimes_sleepy
     def upload_file(
         self, upload_id, upload_auth_token, file_name, content_length, content_type, content_sha1,
         file_infos, data_stream
@@ -597,6 +623,7 @@ class BucketSimulator(object):
         self.file_name_and_id_to_file[file_sim.sort_key()] = file_sim
         return file_sim.as_upload_result()
 
+    @sometimes_sleepy
     def upload_part(self, file_id, part_number, content_length, sha1_sum, input_stream):
         file_sim = self.file_id_to_file[file_id]
         part_data = input_stream.read()
@@ -677,6 +704,7 @@ class RawSimulator(AbstractRawApi):
         self.all_application_keys = []
         self.app_key_counter = 0
         self.upload_errors = []
+        self.token_blacklist = set()
 
     def expire_auth_token(self, auth_token):
         """
@@ -688,6 +716,7 @@ class RawSimulator(AbstractRawApi):
         assert auth_token in self.auth_token_to_key
         self.expired_auth_tokens.add(auth_token)
 
+    @sometimes_sleepy
     def create_account(self):
         """
         Return (accountId, masterApplicationKey) for a newly created account.
@@ -722,6 +751,7 @@ class RawSimulator(AbstractRawApi):
         assert len(self.upload_errors) == 0
         self.upload_errors = errors
 
+    @sometimes_sleepy
     def authorize_account(self, realm_url, application_key_id, application_key):
         key_sim = self.key_id_to_key.get(application_key_id)
         if key_sim is None:
@@ -747,12 +777,14 @@ class RawSimulator(AbstractRawApi):
             allowed=allowed,
         )
 
+    @sometimes_sleepy
     def cancel_large_file(self, api_url, account_auth_token, file_id):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
         return bucket.cancel_large_file(file_id)
 
+    @sometimes_sleepy
     def create_bucket(
         self,
         api_url,
@@ -778,6 +810,7 @@ class RawSimulator(AbstractRawApi):
         self.bucket_id_to_bucket[bucket_id] = bucket
         return bucket.bucket_dict()
 
+    @sometimes_sleepy
     def create_key(
         self, api_url, account_auth_token, account_id, capabilities, key_name,
         valid_duration_seconds, bucket_id, name_prefix
@@ -819,12 +852,14 @@ class RawSimulator(AbstractRawApi):
         self.all_application_keys.append(key_sim)
         return key_sim.as_created_key()
 
+    @sometimes_sleepy
     def delete_file_version(self, api_url, account_auth_token, file_id, file_name):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'deleteFiles')
         return bucket.delete_file_version(file_id, file_name)
 
+    @sometimes_sleepy
     def delete_bucket(self, api_url, account_auth_token, account_id, bucket_id):
         self._assert_account_auth(api_url, account_auth_token, account_id, 'deleteBuckets')
         bucket = self._get_bucket_by_id(bucket_id)
@@ -832,6 +867,7 @@ class RawSimulator(AbstractRawApi):
         del self.bucket_id_to_bucket[bucket_id]
         return bucket.bucket_dict()
 
+    @sometimes_sleepy
     def download_file_from_url(self, _, account_auth_token_or_none, url, range_=None):
         # TODO: check auth token if bucket is not public
         matcher = self.DOWNLOAD_URL_MATCHER.match(url)
@@ -850,6 +886,7 @@ class RawSimulator(AbstractRawApi):
         else:
             assert False
 
+    @sometimes_sleepy
     def delete_key(self, api_url, account_auth_token, application_key_id):
         assert api_url == self.API_URL
         return dict(
@@ -859,12 +896,14 @@ class RawSimulator(AbstractRawApi):
             capabilities=['listBuckets', 'readBuckets', 'writeBuckets']
         )
 
+    @sometimes_sleepy
     def finish_large_file(self, api_url, account_auth_token, file_id, part_sha1_array):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
         return bucket.finish_large_file(file_id, part_sha1_array)
 
+    @sometimes_sleepy
     def get_download_authorization(
         self, api_url, account_auth_token, bucket_id, file_name_prefix, valid_duration_in_seconds
     ):
@@ -883,22 +922,26 @@ class RawSimulator(AbstractRawApi):
                 )
         }
 
+    @sometimes_sleepy
     def get_file_info(self, api_url, account_auth_token, file_id):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         return bucket.get_file_info(file_id)
 
+    @sometimes_sleepy
     def get_upload_url(self, api_url, account_auth_token, bucket_id):
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
         return self._get_bucket_by_id(bucket_id).get_upload_url()
 
+    @sometimes_sleepy
     def get_upload_part_url(self, api_url, account_auth_token, file_id):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
         return self._get_bucket_by_id(bucket_id).get_upload_part_url(file_id)
 
+    @sometimes_sleepy
     def hide_file(self, api_url, account_auth_token, bucket_id, file_name):
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
@@ -906,6 +949,7 @@ class RawSimulator(AbstractRawApi):
         self.file_id_to_bucket_id[response['fileId']] = bucket_id
         return response
 
+    @sometimes_sleepy
     def copy_file(
         self,
         api_url,
@@ -942,6 +986,7 @@ class RawSimulator(AbstractRawApi):
         dest_bucket.file_name_and_id_to_file[copy_file_sim.sort_key()] = copy_file_sim
         return copy_file_sim.as_upload_result()
 
+    @sometimes_sleepy
     def list_buckets(
         self, api_url, account_auth_token, account_id, bucket_id=None, bucket_name=None
     ):
@@ -976,6 +1021,7 @@ class RawSimulator(AbstractRawApi):
             (bucket_name is None or bucket.bucket_name == bucket_name)
         )
 
+    @sometimes_sleepy
     def list_file_names(
         self,
         api_url,
@@ -996,6 +1042,7 @@ class RawSimulator(AbstractRawApi):
         )
         return bucket.list_file_names(start_file_name, max_file_count, prefix)
 
+    @sometimes_sleepy
     def list_file_versions(
         self,
         api_url,
@@ -1017,6 +1064,7 @@ class RawSimulator(AbstractRawApi):
         )
         return bucket.list_file_versions(start_file_name, start_file_id, max_file_count, prefix)
 
+    @sometimes_sleepy
     def list_keys(
         self,
         api_url,
@@ -1029,12 +1077,14 @@ class RawSimulator(AbstractRawApi):
         keys = map(lambda key: key.as_key(), self.all_application_keys)
         return dict(keys=keys, nextKeyId=None)
 
+    @sometimes_sleepy
     def list_parts(self, api_url, account_auth_token, file_id, start_part_number, max_part_count):
         bucket_id = self.file_id_to_bucket_id[file_id]
         bucket = self._get_bucket_by_id(bucket_id)
         self._assert_account_auth(api_url, account_auth_token, bucket.account_id, 'writeFiles')
         return bucket.list_parts(file_id, start_part_number, max_part_count)
 
+    @sometimes_sleepy
     def list_unfinished_large_files(
         self,
         api_url,
@@ -1052,6 +1102,7 @@ class RawSimulator(AbstractRawApi):
         max_file_count = max_file_count or 100
         return bucket.list_unfinished_large_files(start_file_id, max_file_count, prefix)
 
+    @sometimes_sleepy
     def start_large_file(
         self, api_url, account_auth_token, bucket_id, file_name, content_type, file_info
     ):
@@ -1061,6 +1112,7 @@ class RawSimulator(AbstractRawApi):
         self.file_id_to_bucket_id[result['fileId']] = bucket_id
         return result
 
+    @sometimes_sleepy
     def update_bucket(
         self,
         api_url,
@@ -1084,6 +1136,7 @@ class RawSimulator(AbstractRawApi):
             if_revision_is=if_revision_is
         )
 
+    @sometimes_sleepy
     @set_token_type(TokenType.UPLOAD_SMALL)
     def upload_file(
         self, upload_url, upload_auth_token, file_name, content_length, content_type, content_sha1,
@@ -1093,27 +1146,34 @@ class RawSimulator(AbstractRawApi):
             self.currently_used_auth_tokens[upload_auth_token], upload_auth_token
         ):
             assert upload_url == upload_auth_token
+            if upload_auth_token in self.token_blacklist:
+                raise InvalidAuthToken('upload auth token reused after a failed request')
             url_match = self.UPLOAD_URL_MATCHER.match(upload_url)
             if url_match is None:
                 raise BadUploadUrl(upload_url)
-            if self.upload_errors:
-                raise self.upload_errors.pop(0)
             bucket_id, upload_id = url_match.groups()
             bucket = self._get_bucket_by_id(bucket_id)
-            response = bucket.upload_file(
-                upload_id,
-                upload_auth_token,
-                file_name,
-                content_length,
-                content_type,
-                content_sha1,
-                file_infos,
-                data_stream,
-            )
+            try:
+                if self.upload_errors:
+                    raise self.upload_errors.pop(0)
+                response = bucket.upload_file(
+                    upload_id,
+                    upload_auth_token,
+                    file_name,
+                    content_length,
+                    content_type,
+                    content_sha1,
+                    file_infos,
+                    data_stream,
+                )
+            except:
+                self.token_blacklist.add(upload_auth_token)
+                raise
             file_id = response['fileId']
             self.file_id_to_bucket_id[file_id] = bucket_id
         return response
 
+    @sometimes_sleepy
     @set_token_type(TokenType.UPLOAD_PART)
     def upload_part(
         self, upload_url, upload_auth_token, part_number, content_length, sha1_sum, input_stream
@@ -1121,13 +1181,23 @@ class RawSimulator(AbstractRawApi):
         with ConcurrentUsedAuthTokenGuard(
             self.currently_used_auth_tokens[upload_auth_token], upload_auth_token
         ):
+            if upload_auth_token in self.token_blacklist:
+                raise InvalidAuthToken('upload auth token reused after a failed request')
             url_match = self.UPLOAD_PART_MATCHER.match(upload_url)
             if url_match is None:
                 raise BadUploadUrl(upload_url)
             file_id = url_match.group(1)
             bucket_id = self.file_id_to_bucket_id[file_id]
             bucket = self._get_bucket_by_id(bucket_id)
-            part = bucket.upload_part(file_id, part_number, content_length, sha1_sum, input_stream)
+            try:
+                if self.upload_errors:
+                    raise self.upload_errors.pop(0)
+                part = bucket.upload_part(
+                    file_id, part_number, content_length, sha1_sum, input_stream
+                )
+            except:
+                self.token_blacklist.add(upload_auth_token)
+                raise
         return part
 
     def _assert_account_auth(

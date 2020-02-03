@@ -683,6 +683,7 @@ class Bucket(object):
                     return response
             except B2Error as e:
                 exception_list.append(e)
+                print('calling account_info.clear_bucket_upload_data(%s)', self.id_)
                 self.api.account_info.clear_bucket_upload_data(self.id_)
 
         large_file_upload_state.set_error(str(exception_list[-1]))
