@@ -23,7 +23,12 @@ from b2sdk.utils import hex_sha1_of_stream, hex_sha1_of_unlimited_stream
 class AbstractUploadSource(OutboundTransferSource):
     """
     The source of data for uploading to b2.
+
+    :ivar ~.content_sha1: sha1 checksum of the entire file, can be ``None`` if unknown (yet)
+    :vartype ~.content_sha1: str or None
     """
+    def __init__(self, content_sha1=None):
+        self.content_sha1 = content_sha1  # NOTE: hashing reader *writes* to this field
 
     @abstractmethod
     def get_content_sha1(self):
@@ -34,8 +39,7 @@ class AbstractUploadSource(OutboundTransferSource):
     @abstractmethod
     def open(self):
         """
-        Return a binary file-like object from which the
-        data can be read.
+        Return a binary file-like object from which the data can be read.
         :return:
         """
 
@@ -47,8 +51,9 @@ class AbstractUploadSource(OutboundTransferSource):
 
 
 class UploadSourceBytes(AbstractUploadSource):
-    def __init__(self, data_bytes):
+    def __init__(self, data_bytes, content_sha1=None):
         self.data_bytes = data_bytes
+        super(UploadSourceBytes, self).__init__(content_sha1)
 
     def __repr__(self):
         return '<{classname} data={data} id={id}>'.format(
@@ -62,7 +67,9 @@ class UploadSourceBytes(AbstractUploadSource):
         return len(self.data_bytes)
 
     def get_content_sha1(self):
-        return hashlib.sha1(self.data_bytes).hexdigest()
+        if self.content_sha1 is None:
+            self.content_sha1 = hashlib.sha1(self.data_bytes).hexdigest()
+        return self.content_sha1
 
     def open(self):
         return io.BytesIO(self.data_bytes)
@@ -74,7 +81,7 @@ class UploadSourceLocalFile(AbstractUploadSource):
         if not os.path.isfile(local_path):
             raise InvalidUploadSource(local_path)
         self.content_length = os.path.getsize(local_path)
-        self.content_sha1 = content_sha1
+        super(UploadSourceLocalFile, self).__init__(content_sha1)
 
     def __repr__(self):
         return (
@@ -115,6 +122,7 @@ class UploadSourceLocalFileRange(UploadSourceLocalFile):
             if length + self.offset > self.file_size:
                 raise ValueError('Range length overflow file size')
             self.content_length = length
+        super(UploadSourceLocalFileRange, self).__init__(content_sha1)
 
     def __repr__(self):
         return (
@@ -138,7 +146,7 @@ class UploadSourceStream(AbstractUploadSource):
     def __init__(self, stream_opener, stream_length=None, stream_sha1=None):
         self.stream_opener = stream_opener
         self._content_length = stream_length
-        self._content_sha1 = stream_sha1
+        super(UploadSourceStream, self).__init__(content_sha1=stream_sha1)
 
     def __repr__(self):
         return (
@@ -148,7 +156,7 @@ class UploadSourceStream(AbstractUploadSource):
             classname=self.__class__.__name__,
             stream_opener=repr(self.stream_opener),
             content_length=self._content_length,
-            content_sha1=self._content_sha1,
+            content_sha1=self.content_sha1,
             id=id(self),
         )
 
@@ -158,9 +166,9 @@ class UploadSourceStream(AbstractUploadSource):
         return self._content_length
 
     def get_content_sha1(self):
-        if self._content_sha1 is None:
+        if self.content_sha1 is None:
             self._set_content_length_and_sha1()
-        return self._content_sha1
+        return self.content_sha1
 
     def open(self):
         return self.stream_opener()
@@ -168,7 +176,7 @@ class UploadSourceStream(AbstractUploadSource):
     def _set_content_length_and_sha1(self):
         sha1, content_length = hex_sha1_of_unlimited_stream(self.open())
         self._content_length = content_length
-        self._content_sha1 = sha1
+        self.content_sha1 = sha1
 
 
 class UploadSourceStreamRange(UploadSourceStream):
