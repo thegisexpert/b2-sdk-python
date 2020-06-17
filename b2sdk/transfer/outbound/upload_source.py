@@ -24,17 +24,34 @@ class AbstractUploadSource(OutboundTransferSource):
     """
     The source of data for uploading to b2.
 
+    `is_sha1_known()` is useful for medium-sized files where in the first upload attempt we'd like to
+    stream-read-and-hash, but later on when retrying, the hash is already calculated, so
+    there is no point in calculating it again. The caller may use :py:class:`b2sdk.v1.StreamWithHash`
+    in the first attempt and then switch to passing the checksum explicitly to :meth:`b2sdk.v1.Session.upload_file`
+    in order to avoid (cpu-intensive) re-streaming.
+
     :ivar ~.content_sha1: sha1 checksum of the entire file, can be ``None`` if unknown (yet)
     :vartype ~.content_sha1: str or None
     """
     def __init__(self, content_sha1=None):
-        self.content_sha1 = content_sha1  # NOTE: hashing reader *writes* to this field
+        self.content_sha1 = content_sha1  # NOTE: b2sdk.transfer.upload_manager *writes* to this field
 
     @abstractmethod
     def get_content_sha1(self):
         """
-        Return a 40-character string containing the hex SHA1 checksum of the data in the file.
+        Return a 40-character string containing the hex sha1 checksum of the data in the file.
+        The implementation of this method may cache the checksum value to avoid recalculating it.
+        This method may not be thread-safe: if two threads are trying to get the checksum
+        at the exact same moment, it may be calculated twice.
         """
+
+    def is_sha1_known(self):
+        """
+        Tells whether the checksum would be calculated if `get_content_sha1()` would be called.
+
+        :rtype: bool
+        """
+        return self.content_sha1 is not None
 
     @abstractmethod
     def open(self):
